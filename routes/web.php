@@ -18,11 +18,14 @@ Route::middleware('guest')->group(function () {  #aki bevan jelentkezve nem éri
 });
 
 
-Route::get('/', function(){
-    return view('home');
-})->middleware('auth')->name('home');   #nem tud belépni, aki nincs bejelentkezve
+// Route::get('/', function(){
+//     return view('home');
+// })->middleware('auth')->name('home');   #nem tud belépni, aki nincs bejelentkezve
 
 Route::middleware('auth')->group(function () {
+    Route::get('/', function() {
+        return view('home');
+    })->name('home');
     Route::get('/profile', [UserController::class, 'Edit'])->name('profile.edit');
     Route::post('/profile', [UserController::class, 'Update'])->name('profile.update');
     Route::post('/logout', [UserController::class, 'Logout'])->name('logout');

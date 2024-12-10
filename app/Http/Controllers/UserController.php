@@ -8,12 +8,16 @@ use Illuminate\Support\Facades\Session;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\DB;
 
 
 
 class UserController extends Controller
 {
-    public function Register(Request $request) {
+
+
+    public function Register(Request $request)
+    {
         $validated = $request->validate([
             'emailform' => 'required|email|unique:users,email',
             'nickname' => 'required|max:20',
@@ -21,39 +25,49 @@ class UserController extends Controller
             'password' => 'required|min:8',
             'password_confirmation' => 'same:password',
         ], [
-            'emailform.required' => 'Az email cím megadása kötelező!',
-            'emailform.unique' =>'Ezzel az emil címmel már regisztráltak!',
-            'emailform.email' => 'A megadott email cím nem érvényes!',
-            'nickname.required' => 'A becenév megadása kötelező!',
-            'nickname.max' => 'A becenév legfeljebb 20 karakter hosszú lehet!',
-            'b_day' => 'A születési idő megadása kötelező',
-            'password.required' => 'A jelszó megadása kötelező!',
-            'password.min' => 'A jelszónak legalább 8 karakter hosszúnak kell lennie!',
-            'password_confirmation' => 'A két jelszónak meg kell egyeznie!'
+            // Egyéni validációs üzenetek
         ]);
 
+        // Tranzakció indítása
+        DB::beginTransaction();
 
-        $user = User::create([
-            'email' => $validated['emailform'],
-            'name' => $validated['nickname'],
-            'birth_day' => $validated['b_day'],
-            'password' => bcrypt($validated['password']),
-        ]);
+        try {
+            // Felhasználó mentése az adatbázisba
+            $user = User::create([
+                'email' => $validated['emailform'],
+                'name' => $validated['nickname'],
+                'birth_day' => $validated['b_day'],
+                'password' => bcrypt($validated['password']),
+            ]);
 
-        $filePath = $this->saveToFile($user); #file-ba kimentés
+            // Fájlba írás (véletlenszerű hiba szimulálása)
+            $filePath = $this->saveToFile($user);
 
-        $user->file_storage_path = $filePath;
-        $user->save();
+            // Fájl elérési út mentése az adatbázisba
+            $user->file_storage_path = $filePath;
+            $user->save();
 
-        session()->flash('success', 'Sikeres regisztráció!');
+            // Tranzakció megerősítése, ha minden sikerült
+            DB::commit();
 
+            session()->flash('success', 'Sikeres regisztráció!');
+            return redirect()->route('register');
+        } catch (\Exception $e) {
+            // Ha hiba történik, a tranzakció visszavonása
+            DB::rollBack();
 
-        return redirect()->route(route: 'register');
-
+            // Hibakezelés: hibaüzenet visszaadása
+            return back()->withErrors(['error' => 'A regisztráció során hiba történt!'])->withInput();
+        }
     }
 
     private function saveToFile($user)
     {
+        // Véletlenszerű hiba generálása a fájlba írás során (erőforráshiány szimulálása)
+        if (rand(1, 10) <= 3) {  // 30% eséllyel hiba történik
+            throw new \Exception("Hiba történt a fájlba írás során.");
+        }
+
         $data = [
             'name' => $user->name,
             'email' => $user->email,
@@ -64,6 +78,8 @@ class UserController extends Controller
 
         return $filePath;
     }
+
+
 
 
     public function Login(Request $request)
@@ -96,8 +112,6 @@ class UserController extends Controller
 
         session()->flash('success', 'Sikeres bejelentkezés!');
         return redirect()->intended(route('home'));
-
-
     }
     public function Logout()
     {
@@ -107,17 +121,19 @@ class UserController extends Controller
         return redirect()->route('login'); // Visszairányítás a bejelentkezési oldalra
     }
 
-    public function Edit(){
-        return view('profile.edit',['user'=> Auth::user()]);
+    public function Edit()
+    {
+        return view('profile.edit', ['user' => Auth::user()]);
     }
-    public function Update(Request $request){
+    public function Update(Request $request)
+    {
         $user = Auth::user();
 
         $validated = $request->validate([
             'nickname' => 'required|max:20',
             'b_day' => 'required|date|before:2006-01-01',
             'password' => 'required|min:8',
-        ],[
+        ], [
             'nickname.required' => 'A becenév megadása kötelező!',
             'nickname.max' => 'A becenév legfeljebb 20 karakter hosszú lehet!',
             'b_day' => 'A születési idő megadása kötelező',
@@ -127,12 +143,10 @@ class UserController extends Controller
 
         $user->name = $validated['nickname'];
         $user->birth_day = $validated['b_day'];
-        $user->password = $validated['password'];
+        $user->password = bcrypt($validated['password']);  // Jelszó titkosítása
 
+        $user->save();
 
-        $user -> save();
-
-        return redirect()->route('profile.edit')->with('success','Profil sikeresen frissítve!');
+        return redirect()->route('profile.edit')->with('success', 'Profil sikeresen frissítve!');
     }
-
 }
